@@ -1,0 +1,49 @@
+---
+  - name: Bootstrap Ceph     
+    hosts: cephadmin
+    become: true
+    vars_prompt:
+      - name: REGISTRY_USERNAME
+        prompt: Enter Registry Username
+        private: true
+      - name: REGISTRY_PASSWORD
+        prompt: Enter Registry Password
+        private: true
+    tasks:
+      - name: Uncomment ceph4 repos due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2246456
+        ansible.builtin.lineinfile:
+          path: /usr/share/cephadm-ansible/cephadm-preflight.yml
+          state: absent
+          regexp: '^      - rhceph-4'
+
+      - name: Run preflight
+        ansible.builtin.shell: |
+          ansible-playbook  cephadm-preflight.yml --extra-vars "ceph_origin=rhcs ceph_rhcs_version=6"
+        args:
+          chdir: /usr/share/cephadm-ansible
+        register: preflight
+
+      - name: Print output
+        ansible.builtin.debug:
+          var: preflight
+
+      - name: Copy pull secret.json file to /tmp
+        ansible.builtin.template:
+          src: ../templates/pull-secret.json.j2
+          dest: /tmp/pull-secret.json
+
+      - name: Bootstrap cluster
+        ansible.builtin.shell: |
+          cephadm bootstrap --cluster-network {{ subnet }} --mon-ip {{ hostvars['cephadmin'].ansible_host }} --registry-json /tmp/pull-secret.json --initial-dashboard-password password  --ssh-user {{ cephusername }}  --yes-i-know 
+        args:
+          chdir: /usr/share/cephadm-ansible
+        register: bootstrap
+
+      - name: Print output
+        ansible.builtin.debug:
+          var: bootstrap
+
+      - name: Delete pull secret 
+        ansible.builtin.file:
+          path: /tmp/pull-secret.json
+          state: absent

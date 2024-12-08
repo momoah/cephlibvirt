@@ -1,0 +1,38 @@
+---
+  - name: Prepare terraforms 
+    hosts: localhost
+    connection: local
+    gather_facts: no
+    tasks:
+      - name: Delete {{ tempdirbase }}/ceph/
+        ansible.builtin.file:
+          path: "{{ tempdirbase }}/ceph/"
+          state: absent
+      - name: Create {{ tempdirbase }}/ceph/
+        ansible.builtin.file:
+          path: "{{ tempdirbase }}/ceph/"
+          state: directory
+          owner: "{{ hostvars[groups['myvms'][0]].mysshuser }}"
+          group: "{{ hostvars[groups['myvms'][0]].mysshuser }}"
+          mode: '755'
+      - name: Populate and copy myvars.tf
+        ansible.builtin.template: 
+          src: ../templates/myvars.tf.j2
+          dest: "{{ tempdirbase }}/ceph/myvars.tf"
+      - name: Copy rest of terraforms
+        ansible.builtin.copy:
+          src: ../files/terraform/
+          dest: "{{ tempdirbase }}/ceph/"
+      - name: Basic deploy
+        community.general.terraform:
+          project_path: "{{ tempdirbase }}/ceph/"
+          state: present
+          force_init: true
+          parallelism: 1 # Restrict it to one resource at a time, the system was getting bogged down
+          lock: false # Probably not a good idea generally, but I'm hitting an issue 
+        become: true
+          # If this fails, it could be due to:
+          # https://github.com/dmacvicar/terraform-provider-libvirt/pull/1039
+          # But check the VMs and if they are created, you are good.
+
+  

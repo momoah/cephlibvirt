@@ -1,0 +1,58 @@
+---
+  - name: Install Ceph Software and Update
+    hosts: cephadmin
+    become: true
+    tasks:
+      - name: Enable Ceph 6 Repos
+        community.general.rhsm_repository:
+          name: 
+            - rhceph-6-tools-for-rhel-9-x86_64-rpms
+          state: enabled
+      - name: Install Ceph Software
+        ansible.builtin.dnf:
+          name: 
+            - "cephadm-ansible"
+            - "ceph-common"
+          state: latest
+      - name: Deploy the ansible inventory to /usr/share/cephadm-ansible
+        ansible.builtin.file:
+          name: /usr/share/cephadm-ansible/inventory
+          state: directory
+      - name: Remove the inventory line in ansible.cfg
+        ansible.builtin.lineinfile:
+          path: /usr/share/cephadm-ansible/ansible.cfg
+          state: absent
+          regexp: '^inventory$'
+      - name: Add the inventory line in ansible.cfg
+        ansible.builtin.lineinfile:
+          path: /usr/share/cephadm-ansible/ansible.cfg
+          state: present
+          line: 'inventory = ./inventory/'
+          insertafter: 'roles_path = ./'
+      - name: Add host_checking_option in ansible.cfg
+        ansible.builtin.lineinfile:
+          path: /usr/share/cephadm-ansible/ansible.cfg
+          state: present
+          line: 'host_key_checking = False'
+          insertafter: 'inventory = ./inventory/'
+      - name: Adding ansible_user to  in ansible.cfg
+        ansible.builtin.lineinfile:
+          path: /usr/share/cephadm-ansible/ansible.cfg
+          state: present
+          line: 'ansible_user={{ cephusername }}'
+          insertafter: '[ssh_connection]'
+      - name: Populate the ansible inventory file
+        ansible.builtin.template: 
+          src: ../templates/hosts.j2
+          dest: /usr/share/cephadm-ansible/inventory/hosts
+      - name: Copy the private ssh keys to cephadmin
+        ansible.builtin.copy:
+          src: '~/.ssh/id_rsa'
+          dest: /root/.ssh/
+          mode: '600'
+      - name: Copy the public ssh keys to cephadmin
+        ansible.builtin.copy:
+          src: '~/.ssh/id_rsa.pub'
+          dest: /root/.ssh/
+          mode: '644'
+

@@ -1,0 +1,7 @@
+{% for myhost in groups['myvms'] %}
+{{ hostvars[myhost].inventory_hostname }} ansible_host={{ hostvars[groups['myvms'][0]].ansible_host }}
+{% endfor %}
+[admin]
+{{ hostvars['cephadmin'].inventory_hostname }}
+[all:vars]
+ansible_user = {{ hostvars[groups['myvms'][0]].cephusername }}

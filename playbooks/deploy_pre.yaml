@@ -1,0 +1,5 @@
+---
+- import_playbook: 01_terraform.yml
+- import_playbook: 02_rhel_updates.yml
+- import_playbook: 03_ceph_updates.yml
+

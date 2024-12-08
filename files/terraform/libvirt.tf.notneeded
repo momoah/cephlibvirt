@@ -1,0 +1,16 @@
+# This might not be needed, still deciding 
+resource "libvirt_network" "bridged-network" {
+   # This assumes you already have a bridge setup outside
+   name = "${ var.bridged_network_name }"
+   addresses = ["${ var.subnet }"]
+   mode = "${ var.bridge_mode }"
+   bridge = "${ var.bridge_name }"
+   dhcp {
+      enabled = false
+   }
+  # Enables usage of the host dns if no local records match
+  dns {
+    enabled = false
+    local_only = false
+  }
+}

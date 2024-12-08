@@ -1,0 +1,88 @@
+---
+  - name: Cephadmin post bootstrap
+    hosts: cephadmin
+    become: true
+    tasks:
+      - name: Print output of inventory
+        ansible.builtin.debug:
+          msg: "hostname {{ host_name }}, ip address: {{ ip_address }}"
+        vars:
+          ip_address: "{{ hostvars[item]['ansible_host'] }}"
+          host_name: "{{ hostvars[item]['inventory_hostname'] }}"
+        with_items: "{{ groups['myvms'] }}"
+
+      - name: Copy ssh keys to hosts with ssh-copy-id
+        ansible.builtin.shell: |
+          ssh-copy-id -f -i /etc/ceph/ceph.pub -o StrictHostKeyChecking=no  {{ cephusername }}@{{ item }}.{{ domain }}
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        with_items: "{{ groups['myvms'] }}"
+
+      - name: List hosts in current ceph cluster
+        ansible.builtin.shell: |
+          ceph orch host ls
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        register: ceph_orch_host_ls_before
+
+      - name: Print output of host listing
+        ansible.builtin.debug:
+          var: ceph_orch_host_ls_before
+
+      - name: Add ceph nodes to cluster and assign roles
+        ansible.builtin.shell: |
+          echo "Working on: {{ host_name }}"
+          ceph orch host add {{ host_name }} {{ ip_address }}
+          {% if 'ceph-' in  host_name %}
+          echo "Assigning roles to ceph node {{ host_name }}"
+            {% if 'osd' in ceph_roles %}
+            echo "Assigning osd role to {{ host_name }}"
+            ceph orch host label add {{ host_name }} osd
+            {% endif %}
+            {% if 'mon' in ceph_roles %}
+            echo "Assigning mon role to {{ host_name }}"
+            ceph orch host label add {{ host_name }} mon
+            {% endif %}
+            {% if 'mgr' in ceph_roles %}
+            echo "Assigning mgr role to {{ host_name }}"
+            ceph orch host label add {{ host_name }} mgr
+            {% endif %}
+            {% if 'mds' in ceph_roles %}
+            echo "Assigning mds role to {{ host_name }}"
+            ceph orch host label add {{ host_name }} mds
+            {% endif %}
+          {% endif %}
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        vars:
+          ip_address: "{{ hostvars[item]['ansible_host'] }}"
+          host_name: "{{ hostvars[item]['inventory_hostname'] }}"  
+          ceph_roles: "{{ hostvars[item]['ceph_roles'] }}"
+        with_items: "{{ groups['myvms'] }}"
+        register: assign_roles
+
+      - name: Print output of adding and assigning roles
+        ansible.builtin.debug:
+          var: assign_roles
+
+      - name: List hosts and apply roles        
+        ansible.builtin.shell: |
+          ceph orch apply mon --placement="*"
+          ceph orch apply mgr --placement="*"
+          ceph orch apply osd --all-available-devices
+          ceph orch host ls
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        register: ceph_orch_host_ls_after
+
+      - name: Print output of host listing and role application
+        ansible.builtin.debug:
+          var: ceph_orch_host_ls_after
+
+      - name: Copy the ceph-external-cluster-details-exporter.py tp /root
+        ansible.builtin.copy:
+          src: ../files/ceph-external-cluster-details-exporter.py
+          dest: /root/
+          mode: '755'
+
+

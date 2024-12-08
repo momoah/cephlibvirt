@@ -1,0 +1,20 @@
+mypool: "SSD1_VMs"
+domain: "local.momolab.io"
+dns: "192.168.1.150"
+bridged_network_name: "bridged-network"
+gateway: "192.168.1.1"
+subnet: "192.168.1.0/24"
+#qcow_source: "/ocean/ISOs/rhel-8.8-x86_64-kvm.qcow2"
+#qcow_source: "/ocean/ISOs/rhel-9.2-x86_64-kvm.qcow2"
+qcow_source: "/ocean/ISOs/rhel-9.2-x86_64-kvm_50g.qcow2" # Resized based on instructions from https://gist.github.com/joseluisq/2fcf26ff1b9c59fe998b4fbfcc388342
+bridge_name: "br0"
+bridge_mode: "bridge"
+macvtap_name: "eth0"
+cephusername: "ceph-admin" # This will be the ssh user created on the VMs with terraform
+mypassword: "{{ lookup('file', '~/mypassword') }}" # `openssl passwd -1 -salt SaltSalt mysecretpassword`
+mysshuser: "momo"
+mysshkey: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+mysshkeypriv: "{{ lookup('file', '~/.ssh/id_rsa') }}"
+mytoken: "{{ lookup('file', '~/subscription-token') }}" # Get this from -> https://access.redhat.com/management/api
+REGISTRY_URL: "registry.redhat.io"
+tempdirbase: "/ssd1/workdir"

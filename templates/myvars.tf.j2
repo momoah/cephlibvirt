@@ -1,0 +1,26 @@
+locals {
+  vm_details_list = {
+  # Index, hostname (0), IP (1), MACADDR (2), CPU (3), MEM (4), Disk1 (5), Disk2 (6)
+  # Disks of zero size will still be created, but not attached to VM (TODO: Avoid creating disk if zero)
+  {% for myhost in groups['myvms'] %}
+  "{{ loop.index - 1  }}" = ["{{ hostvars[myhost].inventory_hostname }}", "{{ hostvars[myhost].ansible_host }}", "{{ hostvars[myhost].mac }}", "{{ hostvars[myhost].cpu }}", "{{ hostvars[myhost].ram }}", "{{ hostvars[myhost].disk1 }}", "{{ hostvars[myhost].disk2 }}", "{{ hostvars[myhost].disk3 }}","{{ hostvars[myhost].disk4 }}", "{{ hostvars[myhost].disk5 }}"]
+  {% endfor %}
+  }
+}
+
+variable "mypool" { default = "{{ hostvars[groups['myvms'][0]].mypool }}" }
+variable "domain" { default = "{{ hostvars[groups['myvms'][0]].domain }}" }
+variable "dns" { default = "{{ hostvars[groups['myvms'][0]].dns  }}" }
+variable "bridged_network_name" { default = "{{ hostvars[groups['myvms'][0]].bridged_network_name }}" }
+variable "bridge_mode" { default = "{{ hostvars[groups['myvms'][0]].bridge_mode  }}" }
+variable "gateway" { default = "{{ hostvars[groups['myvms'][0]].gateway }}" }
+variable "subnet" { default = "{{ hostvars[groups['myvms'][0]].subnet }}" }
+variable "qcow_source" { default = "{{ hostvars[groups['myvms'][0]].qcow_source }}" }
+variable "bridge_name" { default = "{{ hostvars[groups['myvms'][0]].bridge_name  }}" }
+variable "macvtap_name" { default = "{{ hostvars[groups['myvms'][0]].macvtap_name  }}" }
+# Generate passwords with: `openssl passwd -1 -salt SaltSalt password`
+variable "myusername" { default = "{{ hostvars[groups['myvms'][0]].cephusername }}" }
+variable "mypassword" { default = "{{ hostvars[groups['myvms'][0]].mypassword }}" }
+variable "mysshkey" { default = "{{ hostvars[groups['myvms'][0]].mysshkey }}" }
+
+

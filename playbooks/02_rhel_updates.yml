@@ -1,0 +1,45 @@
+---
+  - name: Register Hosts using subscription manager and update OS
+    hosts: myvms
+    become: true
+    tasks:
+      - name: Register hosts
+        community.general.redhat_subscription:
+          state: present
+          auto_attach: true
+          token: "{{ mytoken }}" 
+          pool_ids:
+            - 8a85f99c7d76f2fd017d96c2c0330651
+          server_insecure: 1 # https://access.redhat.com/discussions/4487561
+          force_register: true
+      - name: Disable all repos
+        community.general.rhsm_repository:
+          name: '*'
+          state: disabled
+
+      - name: Enable RHEL 9 repos and other needed repos
+        community.general.rhsm_repository:
+          name: 
+            - rhel-9-for-x86_64-baseos-rpms
+            - rhel-9-for-x86_64-appstream-rpms
+            - rhceph-6-tools-for-rhel-9-x86_64-rpms # Needed for ceph nodes (to install needed software)
+          state: enabled
+
+      - name: Install needed packages (depends on what you need)
+        ansible.builtin.dnf:
+          name: 
+            - podman
+            - lvm2
+            - chrony
+            - cephadm
+            - python3
+          state: latest
+
+      - name: Update OS
+        ansible.builtin.dnf:
+          name: "*"
+          state: latest
+
+      - name: Unconditionally reboot the machine with all defaults
+        ansible.builtin.reboot: 
+          reboot_timeout: 3600
