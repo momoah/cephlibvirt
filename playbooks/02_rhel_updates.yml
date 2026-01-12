@@ -6,8 +6,8 @@
       - name: Register hosts
         community.general.redhat_subscription:
           state: present
-          auto_attach: true
-          token: "{{ mytoken }}" 
+          org_id: "{{ myorg }}"
+          activationkey: "{{ myac }}" 
           pool_ids:
             - 8a85f99c7d76f2fd017d96c2c0330651
           server_insecure: 1 # https://access.redhat.com/discussions/4487561

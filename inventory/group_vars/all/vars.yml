@@ -14,7 +14,8 @@ mypassword: "{{ lookup('file', '~/mypassword') }}" # `openssl passwd -1 -salt Sa
 mysshuser: "momo"
 mysshkey: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
 mysshkeypriv: "{{ lookup('file', '~/.ssh/id_rsa') }}"
-mytoken: "{{ lookup('file', '~/subscription-token') }}" # Get this from -> https://access.redhat.com/management/api
+myac: "{{ lookup('file', '~/activationkey') }}" # Get this from -> https://console.redhat.com/insights/connector/activation-keys/
+myorg: "{{ lookup('file', '~/organization') }}" # Get this from -> https://console.redhat.com/insights/connector/activation-keys/
 REGISTRY_URL: "registry.redhat.io"
 tempdirbase: "/ssd1/workdir"
 rgw_service_name: ceph-rgw
