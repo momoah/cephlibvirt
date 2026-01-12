@@ -73,7 +73,6 @@
         ansible.builtin.shell: |
           ceph orch apply mon --placement="*"
           ceph orch apply mgr --placement="*"
-          ceph orch apply rgw --placement="cephadmin"
           ceph orch apply osd --all-available-devices
           ceph orch host ls
         args:
@@ -113,11 +112,12 @@
           ceph config-key set rgw/cert/default/default.crt -i /etc/ceph/ssl/rgw.crt
           ceph config-key set rgw/cert/default/default.key -i /etc/ceph/ssl/rgw.key
           ceph config set client.rgw.rados rgw_frontends \
-          "beast ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.crt \
+          "beast port=80 ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.crt \
            ssl_private_key=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.key"
           ceph orch restart rgw.rados
           cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
           cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
+          # Use this to extract access key/secret: cephadm shell -- radosgw-admin user info --uid=openshift
         args:
           chdir: /usr/share/cephadm-ansible/
         register: rgw_setup
