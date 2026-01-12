@@ -51,6 +51,10 @@
             echo "Assigning mds role to {{ host_name }}"
             ceph orch host label add {{ host_name }} mds
             {% endif %}
+            {% if 'rgw' in ceph_roles %}
+            echo "Assigning rgw role to {{ host_name }}"
+            ceph orch host label add {{ host_name }} rgw
+            {% endif %}
           {% endif %}
         args:
           chdir: /usr/share/cephadm-ansible/
@@ -74,10 +78,37 @@
         args:
           chdir: /usr/share/cephadm-ansible/
         register: ceph_orch_host_ls_after
-
+          
       - name: Print output of host listing and role application
         ansible.builtin.debug:
           var: ceph_orch_host_ls_after
+       
+            #        # https://docs.ceph.com/en/reef/cephadm/services/rgw/
+            #      - name: Configure Rados Gateway    
+            #        ansible.builtin.shell: |
+            #          #radosgw-admin realm create --rgw-realm=momolab --default
+            #          #radosgw-admin zonegroup create --rgw-zonegroup=momolab  --master --default
+            #          #radosgw-admin zone create --rgw-zonegroup=momolab --rgw-zone=momolab --master --default
+            #          #radosgw-admin period update --rgw-realm=momolab --commit
+            #          ceph orch apply rgw momolab #--realm=momolab --zone=momolab --placement="*"
+            #     
+            #      - name: Configure RGW (Rados Gateway) settings
+            #        ansible.builtin.shell: |
+            #          echo "Configuring Ceph RGW service"
+            #          ceph config set client.rgw.frontend "civetweb"  # or nginx if preferred
+            #          ceph config set client.rgw.civetweb_port {{ rgw_port }}
+            #          ceph config set client.rgw.ssl_certificate /root/.ssh/id_rsa.pub   # Specify SSL cert if using HTTPS
+            #          ceph config set client.rgw.ssl_private_key /root/.ssh/id_rsa   # Specify SSL private key if using HTTPS
+            #        
+            #      - name: Check RGW status
+            #        ansible.builtin.shell: |
+            #          echo "Checking Ceph RGW service status"
+            #          ceph orch ps --service {{ rgw_service_name }}
+            #        
+            #      - name: Expose RGW API (optional - if you need an external endpoint)
+            #        ansible.builtin.shell: |
+            #          echo "Exposing RGW API externally via a load balancer or directly"
+            #          ufw allow {{ rgw_port }}
 
       - name: Copy the ceph-external-cluster-details-exporter.py tp /root
         ansible.builtin.copy:

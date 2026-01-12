@@ -1,6 +1,6 @@
 # This playbook is designed to add 5 disks to each node, customize accordingly, but ensure terraforms is adjusted accordingly
 [myvms]
-cephadmin ansible_host=192.168.1.210 mac=00:16:3e:25:1a:70 cpu=4 ram=8 disk1=0 disk2=0 disk3=0 disk4=0 disk5=0 ceph_roles="_admin"
+cephadmin ansible_host=192.168.1.210 mac=00:16:3e:25:1a:70 cpu=4 ram=8 disk1=0 disk2=0 disk3=0 disk4=0 disk5=0 ceph_roles="_admin,rgw"
 ceph-01 ansible_host=192.168.1.211 mac=00:16:3e:25:1a:71 cpu=8 ram=32 disk1=100 disk2=100 disk3=100 disk4=100 disk5=100 ceph_roles="mon,mgr,mds,osd"
 ceph-02 ansible_host=192.168.1.212 mac=00:16:3e:25:1a:72 cpu=8 ram=32 disk1=100 disk2=100 disk3=100 disk4=100 disk5=100 ceph_roles="mon,mgr,mds,osd"
 ceph-03 ansible_host=192.168.1.213 mac=00:16:3e:25:1a:73 cpu=8 ram=32 disk1=100 disk2=100 disk3=100 disk4=100 disk5=100 ceph_roles="mon,mgr,mds,osd"

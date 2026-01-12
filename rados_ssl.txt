@@ -1,0 +1,28 @@
+
+
+ceph orch apply rgw rados --realm default --zonegroup default --zone default --placement="1 cephadmin"
+
+mkdir -p /etc/ceph/ssl
+cd /etc/ceph/ssl
+
+openssl req -x509 -newkey rsa:4096 \
+  -keyout rgw.key \
+  -out rgw.crt \
+  -days 825 \
+  -nodes \
+  -subj "/C=AU/O=Momolab/CN=cephadmin.local.momolab.io" \
+  -addext "subjectAltName=DNS:cephadmin.local.momolab.io" \
+  -addext "extendedKeyUsage=serverAuth"
+
+chown root:root /etc/ceph/ssl/rgw.*
+chmod 600 /etc/ceph/ssl/rgw.key
+chmod 644 /etc/ceph/ssl/rgw.crt
+
+ceph config set client.rgw.rados rgw_frontends \
+"beast ssl_port=443 ssl_certificate=/etc/ceph/ssl/rgw.crt ssl_private_key=/etc/ceph/ssl/rgw.key"
+
+
+ceph orch restart rgw.rados
+
+
+

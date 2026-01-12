@@ -1,13 +1,18 @@
 # Defining VM Volume
-resource "libvirt_volume" "os_image" {
-  # This will likely be /dev/vda
-  name = "${element(local.vm_details_list[count.index], 0)}_os_image.qcow2"
-  pool = "${var.mypool}" # List storage pools using virsh pool-list
-  source = "${ var.qcow_source }"
+
+resource "libvirt_volume" "os_image_base" {
+  name   = "os_image_base.qcow2"
+  pool   = var.mypool
+  source = var.qcow_source
   format = "qcow2"
-  # Can't change the size below, must change the qcow2: `qemu-img resize $CLOUD_IMAGE 40G`
-  # size = 10737418240 # multiply by 1,073,741,824 (must be in bytes)
+}
+resource "libvirt_volume" "os_image" {
   count = "${length(local.vm_details_list)}"
+  name = "${element(local.vm_details_list[count.index], 0)}_os_image.qcow2"
+  pool = "${var.mypool}" 
+  format = "qcow2"
+  base_volume_id = libvirt_volume.os_image_base.id
+  size = 50 * 1024 * 1024 * 1024
 }
 
 resource "libvirt_volume" "local_disk_01" {
@@ -177,7 +182,7 @@ resource "libvirt_domain" "myvm" {
   # Data disk #05
   dynamic "disk" {
     # Check if disk5 is set to size 0
-    for_each = element(local.vm_details_list[count.index], 5) == "0" ? [] : [1]
+    for_each = element(local.vm_details_list[count.index], 9) == "0" ? [] : [1]
     content {
       volume_id = libvirt_volume.local_disk_05[count.index].id
     }
