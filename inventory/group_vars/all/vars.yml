@@ -18,6 +18,8 @@ myac: "{{ lookup('file', '~/activationkey') }}" # Get this from -> https://conso
 myorg: "{{ lookup('file', '~/organization') }}" # Get this from -> https://console.redhat.com/insights/connector/activation-keys/
 REGISTRY_URL: "registry.redhat.io"
 tempdirbase: "/ssd1/workdir"
-rgw_service_name: ceph-rgw
-rgw_zone: default
-rgw_port: 443
+rgw_realm: "default"
+rgw_zonegroup: "default"
+rgw_zone: "default"
+rgw_host: "cephadmin.local.momolab.io"
+rgw_port: 9443

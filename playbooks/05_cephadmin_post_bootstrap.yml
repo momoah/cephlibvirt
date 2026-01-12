@@ -73,6 +73,7 @@
         ansible.builtin.shell: |
           ceph orch apply mon --placement="*"
           ceph orch apply mgr --placement="*"
+          ceph orch apply rgw --placement="cephadmin"
           ceph orch apply osd --all-available-devices
           ceph orch host ls
         args:
@@ -83,37 +84,45 @@
         ansible.builtin.debug:
           var: ceph_orch_host_ls_after
        
-            #        # https://docs.ceph.com/en/reef/cephadm/services/rgw/
-            #      - name: Configure Rados Gateway    
-            #        ansible.builtin.shell: |
-            #          #radosgw-admin realm create --rgw-realm=momolab --default
-            #          #radosgw-admin zonegroup create --rgw-zonegroup=momolab  --master --default
-            #          #radosgw-admin zone create --rgw-zonegroup=momolab --rgw-zone=momolab --master --default
-            #          #radosgw-admin period update --rgw-realm=momolab --commit
-            #          ceph orch apply rgw momolab #--realm=momolab --zone=momolab --placement="*"
-            #     
-            #      - name: Configure RGW (Rados Gateway) settings
-            #        ansible.builtin.shell: |
-            #          echo "Configuring Ceph RGW service"
-            #          ceph config set client.rgw.frontend "civetweb"  # or nginx if preferred
-            #          ceph config set client.rgw.civetweb_port {{ rgw_port }}
-            #          ceph config set client.rgw.ssl_certificate /root/.ssh/id_rsa.pub   # Specify SSL cert if using HTTPS
-            #          ceph config set client.rgw.ssl_private_key /root/.ssh/id_rsa   # Specify SSL private key if using HTTPS
-            #        
-            #      - name: Check RGW status
-            #        ansible.builtin.shell: |
-            #          echo "Checking Ceph RGW service status"
-            #          ceph orch ps --service {{ rgw_service_name }}
-            #        
-            #      - name: Expose RGW API (optional - if you need an external endpoint)
-            #        ansible.builtin.shell: |
-            #          echo "Exposing RGW API externally via a load balancer or directly"
-            #          ufw allow {{ rgw_port }}
-
       - name: Copy the ceph-external-cluster-details-exporter.py tp /root
         ansible.builtin.copy:
           src: ../files/ceph-external-cluster-details-exporter.py
           dest: /root/
           mode: '755'
 
+      - name: Setup self signed SSL for secure rados gateway
+        ansible.builtin.shell: |
+          mkdir -p /etc/ceph/ssl
+          cd /etc/ceph/ssl
+          openssl req -x509 -newkey rsa:4096 -keyout rgw.key -out rgw.crt -days 825 -nodes \
+          -subj "/C=AU/O=Momolab/CN={{ rgw_host }}" \
+          -addext "subjectAltName=DNS:{{ rgw_host }}" \
+          -addext "extendedKeyUsage=serverAuth"
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        register: selfsignedssl
+
+      - name: Print output of selfsignedssl
+        ansible.builtin.debug:
+          var: selfsignedssl
+  
+      - name: Setup cephadmin to be an secure rados gateway
+        ansible.builtin.shell: |
+          ceph orch apply rgw rados --realm {{ rgw_realm }} --zonegroup {{ rgw_realm }} --zone {{ rgw_zone }} --placement="1 cephadmin"
+          ceph orch restart rgw.rados
+          ceph config-key set rgw/cert/default/default.crt -i /etc/ceph/ssl/rgw.crt
+          ceph config-key set rgw/cert/default/default.key -i /etc/ceph/ssl/rgw.key
+          ceph config set client.rgw.rados rgw_frontends \
+          "beast ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.crt \
+           ssl_private_key=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.key"
+          ceph orch restart rgw.rados
+          cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
+          cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
+        args:
+          chdir: /usr/share/cephadm-ansible/
+        register: rgw_setup
+
+      - name: Print output of Rados gateway setup
+        ansible.builtin.debug:
+          var: rgw_setup
 
