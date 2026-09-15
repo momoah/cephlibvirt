@@ -143,55 +143,36 @@
           ansible.builtin.debug:
             msg: "Using Let's Encrypt certificates for {{ rgw_host }}"
 
-    # NEW: Create RGW realm, zonegroup, and zone before deploying RGW
-    - name: Create RGW realm
-      ansible.builtin.shell: |
-        cephadm shell -- radosgw-admin realm get --rgw-realm={{ rgw_realm }} 2>/dev/null || \
-        cephadm shell -- radosgw-admin realm create --rgw-realm={{ rgw_realm }} --default
-      args:
-        chdir: /usr/share/cephadm-ansible/
-
-    - name: Create RGW zonegroup with realm association
-      ansible.builtin.shell: |
-        cephadm shell -- radosgw-admin zonegroup get --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} 2>/dev/null || \
-        cephadm shell -- radosgw-admin zonegroup create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --master --default
-      args:
-        chdir: /usr/share/cephadm-ansible/
-
-    - name: Create RGW zone with realm and zonegroup association
-      ansible.builtin.shell: |
-        cephadm shell -- radosgw-admin zone get --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} 2>/dev/null || \
-        cephadm shell -- radosgw-admin zone create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} --master --default
-      args:
-        chdir: /usr/share/cephadm-ansible/
-
-    - name: Commit RGW period
-      ansible.builtin.shell: |
-        cephadm shell -- radosgw-admin period update --commit 2>/dev/null || true
-      args:
-        chdir: /usr/share/cephadm-ansible/
-      ignore_errors: true
-
-    - name: Setup cephadmin to be a secure rados gateway
-      ansible.builtin.shell: |
-        ceph orch apply rgw rados --realm {{ rgw_realm }} --zonegroup {{ rgw_zonegroup }} --zone {{ rgw_zone }} --placement="1 cephadmin"
-        ceph orch restart rgw.rados
-        ceph config-key set rgw/cert/default/default.crt -i {{ ceph_cert_path }}/rgw.crt
-        ceph config-key set rgw/cert/default/default.key -i {{ ceph_cert_path }}/rgw.key
-        ceph config set client.rgw.rados rgw_frontends \
-          "beast port=80 ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/default/default.crt \
-           ssl_private_key=config://rgw/cert/default/default.key"
-        ceph orch restart rgw.rados
-        cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
-        cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
-      args:
-        chdir: /usr/share/cephadm-ansible/
-      register: rgw_setup
-
-    - name: Print output of Rados gateway setup
-      ansible.builtin.debug:
-        var: rgw_setup
-
-    - name: Display certificate type used
-      ansible.builtin.debug:
-        msg: "RGW SSL configured with {{ 'Let''s Encrypt' if (use_letsencrypt | default(false)) else 'self-signed' }} certificates"
+        - name: Create minimal RGW spec
+          ansible.builtin.copy:
+            content: |
+              service_type: rgw
+              service_id: rados
+              placement:
+                hosts:
+                  - cephadmin
+            dest: /tmp/rgw-spec.yaml
+            mode: '0644'
+        
+        - name: Deploy RGW
+          ansible.builtin.shell: ceph orch apply -i /tmp/rgw-spec.yaml
+          args:
+            chdir: /usr/share/cephadm-ansible/
+        
+        - name: Wait for RGW daemon
+          ansible.builtin.pause:
+            seconds: 30
+        
+        - name: Create openshift S3 user
+          ansible.builtin.shell: |
+            cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
+            cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
+          args:
+            chdir: /usr/share/cephadm-ansible/
+        
+        - name: Print RGW summary
+          ansible.builtin.debug:
+            msg: |
+              RGW Setup Complete (HTTP only)
+              Endpoint: http://cephadmin.local.labmesh.org:80/
+              Note: SSL requires mounting /etc/ceph in container (pending Ceph 9 config solution)
