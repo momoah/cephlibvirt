@@ -10,23 +10,21 @@
         prompt: Enter Registry Password
         private: true
     tasks:
-      - name: Uncomment ceph4 repos due to bug https://bugzilla.redhat.com/show_bug.cgi?id=2246456
-        ansible.builtin.lineinfile:
-          path: /usr/share/cephadm-ansible/cephadm-preflight.yml
-          state: absent
-          regexp: '^      - rhceph-4'
-
-      - name: Run preflight
-        ansible.builtin.shell: |
-          ansible-playbook  cephadm-preflight.yml --extra-vars "ceph_origin=rhcs ceph_rhcs_version=6"
-        args:
-          chdir: /usr/share/cephadm-ansible
-        register: preflight
-
-      - name: Print output
+      - name: Skip preflight and run bootstrap directly
         ansible.builtin.debug:
-          var: preflight
+          msg: "Skipping preflight - repos and packages already installed"
 
+      #      - name: Run preflight
+      #        ansible.builtin.shell: |
+      #          ansible-playbook  cephadm-preflight.yml --extra-vars "ceph_origin=rhcs ceph_rhcs_version=9"  --skip-tags enable_repo
+      #        args:
+      #          chdir: /usr/share/cephadm-ansible
+      #        register: preflight
+      #
+      #      - name: Print output
+      #        ansible.builtin.debug:
+      #          var: preflight
+      #
       - name: Copy pull secret.json file to /tmp
         ansible.builtin.template:
           src: ../templates/pull-secret.json.j2

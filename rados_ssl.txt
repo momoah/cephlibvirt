@@ -10,8 +10,8 @@ openssl req -x509 -newkey rsa:4096 \
   -out rgw.crt \
   -days 825 \
   -nodes \
-  -subj "/C=AU/O=Momolab/CN=cephadmin.local.momolab.io" \
-  -addext "subjectAltName=DNS:cephadmin.local.momolab.io" \
+  -subj "/C=AU/O=Momolab/CN=cephadmin.local.labmesh.org" \
+  -addext "subjectAltName=DNS:cephadmin.local.labmesh.org" \
   -addext "extendedKeyUsage=serverAuth"
 
 chown root:root /etc/ceph/ssl/rgw.*

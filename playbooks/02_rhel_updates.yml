@@ -8,21 +8,27 @@
           state: present
           org_id: "{{ myorg }}"
           activationkey: "{{ myac }}" 
-          pool_ids:
-            - 8a85f99c7d76f2fd017d96c2c0330651
+          #pool_ids:
+          #  - 8a85f99c7d76f2fd017d96c2c0330651
           server_insecure: 1 # https://access.redhat.com/discussions/4487561
           force_register: true
+
+      - name: Fix release version to match installed OS ({{ rhel_release }})
+        ansible.builtin.command:
+          cmd: subscription-manager release --set="{{ rhel_release }}"
+        changed_when: true
+
       - name: Disable all repos
         community.general.rhsm_repository:
           name: '*'
           state: disabled
 
-      - name: Enable RHEL 9 repos and other needed repos
+      - name: Enable RHEL 10 repos and other needed repos
         community.general.rhsm_repository:
           name: 
-            - rhel-9-for-x86_64-baseos-rpms
-            - rhel-9-for-x86_64-appstream-rpms
-            - rhceph-6-tools-for-rhel-9-x86_64-rpms # Needed for ceph nodes (to install needed software)
+            - rhel-10-for-x86_64-baseos-rpms
+            - rhel-10-for-x86_64-appstream-rpms
+            - rhceph-9-tools-for-rhel-10-x86_64-rpms # Needed for ceph nodes (to install needed software)
           state: enabled
 
       - name: Install needed packages (depends on what you need)
@@ -32,6 +38,7 @@
             - lvm2
             - chrony
             - cephadm
+            - ceph-common
             - python3
           state: latest
 

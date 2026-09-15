@@ -2,7 +2,7 @@
 
 ## Ensure you have DNS records:
 ```bash
-# cat /var/named/local.momolab.io.db | grep ceph
+# cat /var/named/local.labmesh.org.db | grep ceph
 ; ceph nodes
 cephadmin	IN A 	192.168.1.210
 ceph-01		IN A 	192.168.1.211
@@ -12,10 +12,10 @@ ceph-03		IN A 	192.168.1.213
 and
 ```bash
 # cat /var/named/192.168.1.db |grep ceph
-210	IN 	PTR	cephadmin.local.momolab.io.
-211	IN 	PTR	ceph-01.local.momolab.io.
-212	IN 	PTR	ceph-02.local.momolab.io.
-213	IN 	PTR	ceph-03.local.momolab.io.
+210	IN 	PTR	cephadmin.local.labmesh.org.
+211	IN 	PTR	ceph-01.local.labmesh.org.
+212	IN 	PTR	ceph-02.local.labmesh.org.
+213	IN 	PTR	ceph-03.local.labmesh.org.
 ```
 
 

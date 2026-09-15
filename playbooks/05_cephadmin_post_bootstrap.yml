@@ -1,128 +1,197 @@
 ---
-  - name: Cephadmin post bootstrap
-    hosts: cephadmin
-    become: true
-    tasks:
-      - name: Print output of inventory
-        ansible.builtin.debug:
-          msg: "hostname {{ host_name }}, ip address: {{ ip_address }}"
-        vars:
-          ip_address: "{{ hostvars[item]['ansible_host'] }}"
-          host_name: "{{ hostvars[item]['inventory_hostname'] }}"
-        with_items: "{{ groups['myvms'] }}"
+- name: Cephadmin post bootstrap
+  hosts: cephadmin
+  become: true
+  vars:
+    ceph_cert_path: "/etc/ceph/ssl"
+  tasks:
+    - name: Print output of inventory
+      ansible.builtin.debug:
+        msg: "hostname {{ host_name }}, ip address: {{ ip_address }}"
+      vars:
+        ip_address: "{{ hostvars[item]['ansible_host'] }}"
+        host_name: "{{ hostvars[item]['inventory_hostname'] }}"
+      with_items: "{{ groups['myvms'] }}"
 
-      - name: Copy ssh keys to hosts with ssh-copy-id
-        ansible.builtin.shell: |
-          ssh-copy-id -f -i /etc/ceph/ceph.pub -o StrictHostKeyChecking=no  {{ cephusername }}@{{ item }}.{{ domain }}
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        with_items: "{{ groups['myvms'] }}"
+    - name: Copy ssh keys to hosts with ssh-copy-id
+      ansible.builtin.shell: |
+        ssh-copy-id -f -i /etc/ceph/ceph.pub -o StrictHostKeyChecking=no {{ cephusername }}@{{ item }}.{{ domain }}
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      with_items: "{{ groups['myvms'] }}"
 
-      - name: List hosts in current ceph cluster
-        ansible.builtin.shell: |
-          ceph orch host ls
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        register: ceph_orch_host_ls_before
+    - name: List hosts in current ceph cluster
+      ansible.builtin.shell: |
+        ceph orch host ls
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      register: ceph_orch_host_ls_before
 
-      - name: Print output of host listing
-        ansible.builtin.debug:
-          var: ceph_orch_host_ls_before
+    - name: Print output of host listing
+      ansible.builtin.debug:
+        var: ceph_orch_host_ls_before
 
-      - name: Add ceph nodes to cluster and assign roles
-        ansible.builtin.shell: |
-          echo "Working on: {{ host_name }}"
-          ceph orch host add {{ host_name }} {{ ip_address }}
-          {% if 'ceph-' in  host_name %}
-          echo "Assigning roles to ceph node {{ host_name }}"
-            {% if 'osd' in ceph_roles %}
-            echo "Assigning osd role to {{ host_name }}"
-            ceph orch host label add {{ host_name }} osd
-            {% endif %}
-            {% if 'mon' in ceph_roles %}
-            echo "Assigning mon role to {{ host_name }}"
-            ceph orch host label add {{ host_name }} mon
-            {% endif %}
-            {% if 'mgr' in ceph_roles %}
-            echo "Assigning mgr role to {{ host_name }}"
-            ceph orch host label add {{ host_name }} mgr
-            {% endif %}
-            {% if 'mds' in ceph_roles %}
-            echo "Assigning mds role to {{ host_name }}"
-            ceph orch host label add {{ host_name }} mds
-            {% endif %}
-            {% if 'rgw' in ceph_roles %}
-            echo "Assigning rgw role to {{ host_name }}"
-            ceph orch host label add {{ host_name }} rgw
-            {% endif %}
+    - name: Add ceph nodes to cluster and assign roles
+      ansible.builtin.shell: |
+        echo "Working on: {{ host_name }}"
+        ceph orch host add {{ host_name }} {{ ip_address }}
+        {% if 'ceph-' in host_name %}
+        echo "Assigning roles to ceph node {{ host_name }}"
+          {% if 'osd' in ceph_roles %}
+          echo "Assigning osd role to {{ host_name }}"
+          ceph orch host label add {{ host_name }} osd
           {% endif %}
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        vars:
-          ip_address: "{{ hostvars[item]['ansible_host'] }}"
-          host_name: "{{ hostvars[item]['inventory_hostname'] }}"  
-          ceph_roles: "{{ hostvars[item]['ceph_roles'] }}"
-        with_items: "{{ groups['myvms'] }}"
-        register: assign_roles
+          {% if 'mon' in ceph_roles %}
+          echo "Assigning mon role to {{ host_name }}"
+          ceph orch host label add {{ host_name }} mon
+          {% endif %}
+          {% if 'mgr' in ceph_roles %}
+          echo "Assigning mgr role to {{ host_name }}"
+          ceph orch host label add {{ host_name }} mgr
+          {% endif %}
+          {% if 'mds' in ceph_roles %}
+          echo "Assigning mds role to {{ host_name }}"
+          ceph orch host label add {{ host_name }} mds
+          {% endif %}
+          {% if 'rgw' in ceph_roles %}
+          echo "Assigning rgw role to {{ host_name }}"
+          ceph orch host label add {{ host_name }} rgw
+          {% endif %}
+        {% endif %}
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      vars:
+        ip_address: "{{ hostvars[item]['ansible_host'] }}"
+        host_name: "{{ hostvars[item]['inventory_hostname'] }}"
+        ceph_roles: "{{ hostvars[item]['ceph_roles'] }}"
+      with_items: "{{ groups['myvms'] }}"
+      register: assign_roles
 
-      - name: Print output of adding and assigning roles
-        ansible.builtin.debug:
-          var: assign_roles
+    - name: Print output of adding and assigning roles
+      ansible.builtin.debug:
+        var: assign_roles
 
-      - name: List hosts and apply roles        
-        ansible.builtin.shell: |
-          ceph orch apply mon --placement="*"
-          ceph orch apply mgr --placement="*"
-          ceph orch apply osd --all-available-devices
-          ceph orch host ls
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        register: ceph_orch_host_ls_after
-          
-      - name: Print output of host listing and role application
-        ansible.builtin.debug:
-          var: ceph_orch_host_ls_after
-       
-      - name: Copy the ceph-external-cluster-details-exporter.py tp /root
-        ansible.builtin.copy:
-          src: ../files/ceph-external-cluster-details-exporter.py
-          dest: /root/
-          mode: '755'
+    - name: List hosts and apply roles
+      ansible.builtin.shell: |
+        ceph orch apply mon --placement="*"
+        ceph orch apply mgr --placement="*"
+        ceph orch apply osd --all-available-devices
+        ceph orch host ls
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      register: ceph_orch_host_ls_after
 
-      - name: Setup self signed SSL for secure rados gateway
-        ansible.builtin.shell: |
-          mkdir -p /etc/ceph/ssl
-          cd /etc/ceph/ssl
-          openssl req -x509 -newkey rsa:4096 -keyout rgw.key -out rgw.crt -days 825 -nodes \
+    - name: Print output of host listing and role application
+      ansible.builtin.debug:
+        var: ceph_orch_host_ls_after
+
+    - name: Copy the ceph-external-cluster-details-exporter.py to /root
+      ansible.builtin.copy:
+        src: ../files/ceph-external-cluster-details-exporter.py
+        dest: /root/
+        mode: '755'
+
+    - name: Create SSL directory
+      ansible.builtin.file:
+        path: "{{ ceph_cert_path }}"
+        state: directory
+        mode: '0755'
+
+    # Self-signed certificate block (default when use_letsencrypt is false/undefined)
+    - name: Setup self-signed SSL for secure rados gateway
+      when: not (use_letsencrypt | default(false))
+      ansible.builtin.shell: |
+        openssl req -x509 -newkey rsa:4096 \
+          -keyout rgw.key -out rgw.crt -days 825 -nodes \
           -subj "/C=AU/O=Momolab/CN={{ rgw_host }}" \
           -addext "subjectAltName=DNS:{{ rgw_host }}" \
           -addext "extendedKeyUsage=serverAuth"
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        register: selfsignedssl
+      args:
+        chdir: "{{ ceph_cert_path }}"
+      register: selfsignedssl
 
-      - name: Print output of selfsignedssl
-        ansible.builtin.debug:
-          var: selfsignedssl
-  
-      - name: Setup cephadmin to be an secure rados gateway
-        ansible.builtin.shell: |
-          ceph orch apply rgw rados --realm {{ rgw_realm }} --zonegroup {{ rgw_realm }} --zone {{ rgw_zone }} --placement="1 cephadmin"
-          ceph orch restart rgw.rados
-          ceph config-key set rgw/cert/default/default.crt -i /etc/ceph/ssl/rgw.crt
-          ceph config-key set rgw/cert/default/default.key -i /etc/ceph/ssl/rgw.key
-          ceph config set client.rgw.rados rgw_frontends \
-          "beast port=80 ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.crt \
-           ssl_private_key=config://rgw/cert/{{ rgw_realm }}/{{ rgw_zone }}.key"
-          ceph orch restart rgw.rados
-          cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
-          cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
-          # Use this to extract access key/secret: cephadm shell -- radosgw-admin user info --uid=openshift
-        args:
-          chdir: /usr/share/cephadm-ansible/
-        register: rgw_setup
+    - name: Print self-signed cert output
+      when: not (use_letsencrypt | default(false))
+      ansible.builtin.debug:
+        var: selfsignedssl
 
-      - name: Print output of Rados gateway setup
-        ansible.builtin.debug:
-          var: rgw_setup
+    # Let's Encrypt certificate block
+    - name: Setup Let's Encrypt SSL for secure rados gateway
+      when: use_letsencrypt | default(false)
+      block:
+        - name: Copy Let's Encrypt certificates to Ceph SSL directory
+          ansible.builtin.copy:
+            content: "{{ item.content }}"
+            dest: "{{ item.dest }}"
+            mode: '0600'
+          loop:
+            - { content: "{{ letsencrypt_cert }}", dest: "{{ ceph_cert_path }}/rgw.crt" }
+            - { content: "{{ letsencrypt_key_path }}", dest: "{{ ceph_cert_path }}/rgw.key" }
+          no_log: true  # Hide cert content from logs
 
+        - name: Set proper permissions on copied certs
+          ansible.builtin.file:
+            path: "{{ item }}"
+            mode: '0600'
+            owner: root
+            group: root
+          loop:
+            - "{{ ceph_cert_path }}/rgw.crt"
+            - "{{ ceph_cert_path }}/rgw.key"
+
+        - name: Print Let's Encrypt cert info
+          ansible.builtin.debug:
+            msg: "Using Let's Encrypt certificates for {{ rgw_host }}"
+
+    # NEW: Create RGW realm, zonegroup, and zone before deploying RGW
+    - name: Create RGW realm
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin realm get --rgw-realm={{ rgw_realm }} 2>/dev/null || \
+        cephadm shell -- radosgw-admin realm create --rgw-realm={{ rgw_realm }} --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Create RGW zonegroup with realm association
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin zonegroup get --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} 2>/dev/null || \
+        cephadm shell -- radosgw-admin zonegroup create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --master --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Create RGW zone with realm and zonegroup association
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin zone get --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} 2>/dev/null || \
+        cephadm shell -- radosgw-admin zone create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} --master --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Commit RGW period
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin period update --commit 2>/dev/null || true
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      ignore_errors: true
+
+    - name: Setup cephadmin to be a secure rados gateway
+      ansible.builtin.shell: |
+        ceph orch apply rgw rados --realm {{ rgw_realm }} --zonegroup {{ rgw_zonegroup }} --zone {{ rgw_zone }} --placement="1 cephadmin"
+        ceph orch restart rgw.rados
+        ceph config-key set rgw/cert/default/default.crt -i {{ ceph_cert_path }}/rgw.crt
+        ceph config-key set rgw/cert/default/default.key -i {{ ceph_cert_path }}/rgw.key
+        ceph config set client.rgw.rados rgw_frontends \
+          "beast port=80 ssl_port={{ rgw_port }} ssl_certificate=config://rgw/cert/default/default.crt \
+           ssl_private_key=config://rgw/cert/default/default.key"
+        ceph orch restart rgw.rados
+        cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
+        cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      register: rgw_setup
+
+    - name: Print output of Rados gateway setup
+      ansible.builtin.debug:
+        var: rgw_setup
+
+    - name: Display certificate type used
+      ansible.builtin.debug:
+        msg: "RGW SSL configured with {{ 'Let''s Encrypt' if (use_letsencrypt | default(false)) else 'self-signed' }} certificates"

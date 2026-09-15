@@ -1,11 +1,12 @@
 mypool: "SSD1_VMs"
-domain: "local.momolab.io"
+domain: "local.labmesh.org"
 dns: "192.168.1.150"
 bridged_network_name: "bridged-network"
 gateway: "192.168.1.1"
 subnet: "192.168.1.0/24"
   #qcow_source: "/home/momo/rhel-9.2-x86_64-kvm_50G.qcow2" # Resized based on instructions from https://gist.github.com/joseluisq/2fcf26ff1b9c59fe998b4fbfcc388342
-qcow_source: "/home/momo/rhel-9.2-x86_64-kvm.qcow2" # Resized based on instructions from https://gist.github.com/joseluisq/2fcf26ff1b9c59fe998b4fbfcc388342
+qcow_source: "/home/momo/rhel-10.1-x86_64-kvm_50G.qcow2" # Resized based on instructions from https://gist.github.com/joseluisq/2fcf26ff1b9c59fe998b4fbfcc388342
+rhel_release: "10.1"
 bridge_name: "br0"
 bridge_mode: "bridge"
 macvtap_name: "eth0"
@@ -21,5 +22,12 @@ tempdirbase: "/ssd1/workdir"
 rgw_realm: "default"
 rgw_zonegroup: "default"
 rgw_zone: "default"
-rgw_host: "cephadmin.local.momolab.io"
+rgw_host: "cephadmin.local.labmesh.org"
 rgw_port: 9443
+# Set to true to use Let's Encrypt certs, false for self-signed (default)
+use_ssl_with_rados: true
+use_letsencrypt: true 
+
+# Let's Encrypt certificate paths (using rgw_host from your vars)
+letsencrypt_cert: "{{ lookup('file', '~/cephcerts/fullchain.pem') }}"
+letsencrypt_key_path: "{{ lookup('file', '~/cephcerts/key.pem') }}"
