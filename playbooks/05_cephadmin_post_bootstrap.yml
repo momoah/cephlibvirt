@@ -115,64 +115,54 @@
       ansible.builtin.debug:
         var: selfsignedssl
 
-    # Let's Encrypt certificate block
-    - name: Setup Let's Encrypt SSL for secure rados gateway
-      when: use_letsencrypt | default(false)
-      block:
-        - name: Copy Let's Encrypt certificates to Ceph SSL directory
-          ansible.builtin.copy:
-            content: "{{ item.content }}"
-            dest: "{{ item.dest }}"
-            mode: '0600'
-          loop:
-            - { content: "{{ letsencrypt_cert }}", dest: "{{ ceph_cert_path }}/rgw.crt" }
-            - { content: "{{ letsencrypt_key_path }}", dest: "{{ ceph_cert_path }}/rgw.key" }
-          no_log: true  # Hide cert content from logs
+    - name: Create minimal RGW spec
+      ansible.builtin.copy:
+        content: |
+          service_type: rgw
+          service_id: rados
+          placement:
+            hosts:
+              - cephadmin
+        dest: /tmp/rgw-spec.yaml
+        mode: '0644'
+       
+    - name: Deploy RGW
+      ansible.builtin.shell: ceph orch apply -i /tmp/rgw-spec.yaml
+      args:
+        chdir: /usr/share/cephadm-ansible/
+        
+    - name: Wait for RGW daemon
+      ansible.builtin.pause:
+        seconds: 30
+        
+    - name: Create openshift S3 user
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
+        cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
+      args:
+        chdir: /usr/share/cephadm-ansible/
+        
+    - name: Print RGW summary
+      ansible.builtin.debug:
+        msg: |
+          RGW Setup Complete (HTTP only)
+          Endpoint: http://cephadmin.local.labmesh.org:80/
+          Note: SSL requires mounting /etc/ceph in container (pending Ceph 9 config solution)
 
-        - name: Set proper permissions on copied certs
-          ansible.builtin.file:
-            path: "{{ item }}"
-            mode: '0600'
-            owner: root
-            group: root
-          loop:
-            - "{{ ceph_cert_path }}/rgw.crt"
-            - "{{ ceph_cert_path }}/rgw.key"
-
-        - name: Print Let's Encrypt cert info
-          ansible.builtin.debug:
-            msg: "Using Let's Encrypt certificates for {{ rgw_host }}"
-
-        - name: Create minimal RGW spec
-          ansible.builtin.copy:
-            content: |
-              service_type: rgw
-              service_id: rados
-              placement:
-                hosts:
-                  - cephadmin
-            dest: /tmp/rgw-spec.yaml
-            mode: '0644'
+    - name: Create OpenShift RBD pool
+      ansible.builtin.shell: |
+        # Create pool (128 PGs is reasonable for small cluster)
+        ceph osd pool create openshift 128 128
         
-        - name: Deploy RGW
-          ansible.builtin.shell: ceph orch apply -i /tmp/rgw-spec.yaml
-          args:
-            chdir: /usr/share/cephadm-ansible/
+        # Enable RBD application
+        ceph osd pool application enable openshift rbd
         
-        - name: Wait for RGW daemon
-          ansible.builtin.pause:
-            seconds: 30
-        
-        - name: Create openshift S3 user
-          ansible.builtin.shell: |
-            cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
-            cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
-          args:
-            chdir: /usr/share/cephadm-ansible/
-        
-        - name: Print RGW summary
-          ansible.builtin.debug:
-            msg: |
-              RGW Setup Complete (HTTP only)
-              Endpoint: http://cephadmin.local.labmesh.org:80/
-              Note: SSL requires mounting /etc/ceph in container (pending Ceph 9 config solution)
+        # Verify
+        ceph osd pool ls detail | grep openshift
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      register: pool_creation
+    
+    - name: Print pool creation output
+      ansible.builtin.debug:
+        var: pool_creation
