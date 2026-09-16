@@ -25,9 +25,8 @@ rgw_zone: "default"
 rgw_host: "cephadmin.local.labmesh.org"
 rgw_port: 9443
 # Set to true to use Let's Encrypt certs, false for self-signed (default)
-#use_ssl_with_rados: true
-use_letsencrypt: false 
+use_letsencrypt: true 
 
 # Let's Encrypt certificate paths (using rgw_host from your vars)
-#letsencrypt_cert: "{{ lookup('file', '~/cephcerts/fullchain.pem') }}"
-#letsencrypt_key_path: "{{ lookup('file', '~/cephcerts/key.pem') }}"
+letsencrypt_cert: "{{ lookup('file', '~/cephcerts/fullchain.pem') }}"
+letsencrypt_key_path: "{{ lookup('file', '~/cephcerts/key.pem') }}"

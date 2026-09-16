@@ -1,9 +1,9 @@
 ---
-- name: Cephadmin post bootstrap
+- name: Ceph Admin Post-Bootstrap Configuration
   hosts: cephadmin
   become: true
-  vars:
-    ceph_cert_path: "/etc/ceph/ssl"
+  gather_facts: yes
+  
   tasks:
     - name: Print output of inventory
       ansible.builtin.debug:
@@ -91,31 +91,60 @@
         dest: /root/
         mode: '755'
 
-    - name: Create SSL directory
-      ansible.builtin.file:
-        path: "{{ ceph_cert_path }}"
-        state: directory
-        mode: '0755'
+    - name: Copy certs for dashboard
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        mode: '0600'
+      loop:
+        - { content: "{{ letsencrypt_cert }}", dest: /etc/ceph/dashboard.crt }
+        - { content: "{{ letsencrypt_key_path }}", dest: /etc/ceph/dashboard.key }
+      no_log: true
 
-    # Self-signed certificate block (default when use_letsencrypt is false/undefined)
-    - name: Setup self-signed SSL for secure rados gateway
-      when: not (use_letsencrypt | default(false))
+    - name: Set dashboard SSL certificate
       ansible.builtin.shell: |
-        openssl req -x509 -newkey rsa:4096 \
-          -keyout rgw.key -out rgw.crt -days 825 -nodes \
-          -subj "/C=AU/O=Momolab/CN={{ rgw_host }}" \
-          -addext "subjectAltName=DNS:{{ rgw_host }}" \
-          -addext "extendedKeyUsage=serverAuth"
+        ceph dashboard set-ssl-certificate -i /etc/ceph/dashboard.crt
+        ceph dashboard set-ssl-certificate-key -i /etc/ceph/dashboard.key
+        ceph mgr fail
       args:
-        chdir: "{{ ceph_cert_path }}"
-      register: selfsignedssl
+        chdir: /usr/share/cephadm-ansible/
 
-    - name: Print self-signed cert output
-      when: not (use_letsencrypt | default(false))
+    - name: Create RGW realm
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin realm get --rgw-realm={{ rgw_realm }} 2>/dev/null || \
+        cephadm shell -- radosgw-admin realm create --rgw-realm={{ rgw_realm }} --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      ignore_errors: true
+
+    - name: Create or update RGW zonegroup
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin zonegroup create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --master --default 2>/dev/null || \
+        cephadm shell -- radosgw-admin zonegroup modify --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --master --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      ignore_errors: true
+
+    - name: Create or update RGW zone
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin zone create --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} --master --default 2>/dev/null || \
+        cephadm shell -- radosgw-admin zone modify --rgw-realm={{ rgw_realm }} --rgw-zonegroup={{ rgw_zonegroup }} --rgw-zone={{ rgw_zone }} --master --default
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      ignore_errors: true      
+
+    - name: Commit RGW period
+      ansible.builtin.shell: |
+        cephadm shell -- radosgw-admin period update --commit
+      args:
+        chdir: /usr/share/cephadm-ansible/
+      register: period_commit
+
+    - name: Print period commit result
       ansible.builtin.debug:
-        var: selfsignedssl
+        var: period_commit.stdout_lines
 
-    - name: Create minimal RGW spec
+    - name: Create RGW spec file with embedded SSL certificate
       ansible.builtin.copy:
         content: |
           service_type: rgw
@@ -123,46 +152,66 @@
           placement:
             hosts:
               - cephadmin
+          spec:
+            ssl: true
+            rgw_frontend_port: {{ rgw_port }}
+            rgw_realm: {{ rgw_realm }}
+            rgw_zonegroup: {{ rgw_zonegroup }}
+            rgw_zone: {{ rgw_zone }}
+            rgw_frontend_ssl_certificate: |
+              {{ letsencrypt_key_path | indent(4) }}
+              {{ letsencrypt_cert | indent(4) }}
         dest: /tmp/rgw-spec.yaml
         mode: '0644'
-       
-    - name: Deploy RGW
-      ansible.builtin.shell: ceph orch apply -i /tmp/rgw-spec.yaml
+
+    - name: Apply RGW spec with SSL
+      ansible.builtin.shell: |
+        ceph orch apply -i /tmp/rgw-spec.yaml
       args:
         chdir: /usr/share/cephadm-ansible/
-        
-    - name: Wait for RGW daemon
+      register: rgw_spec_apply
+
+    - name: Redeploy RGW to pick up spec changes
+      ansible.builtin.shell: ceph orch redeploy rgw.rados
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Wait for RGW daemon to start
       ansible.builtin.pause:
         seconds: 30
-        
+
     - name: Create openshift S3 user
       ansible.builtin.shell: |
         cephadm shell -- radosgw-admin user info --uid=openshift >/dev/null 2>&1 || \
         cephadm shell -- radosgw-admin user create --uid=openshift --display-name="OpenShift S3"
       args:
         chdir: /usr/share/cephadm-ansible/
-        
-    - name: Print RGW summary
-      ansible.builtin.debug:
-        msg: |
-          RGW Setup Complete (HTTP only)
-          Endpoint: http://cephadmin.local.labmesh.org:80/
-          Note: SSL requires mounting /etc/ceph in container (pending Ceph 9 config solution)
+      register: rgw_user
+
+    - name: Verify RGW listening on SSL port
+      ansible.builtin.shell: |
+        ss -tlnp | grep ':{{ rgw_port }}' | grep radosgw || (echo "radosgw not on {{ rgw_port }}"; exit 1)
+      register: rgw_port_verify
+      retries: 5
+      delay: 10
+      until: rgw_port_verify.rc == 0
 
     - name: Create OpenShift RBD pool
       ansible.builtin.shell: |
-        # Create pool (128 PGs is reasonable for small cluster)
-        ceph osd pool create openshift 128 128
-        
-        # Enable RBD application
+        ceph osd pool create openshift 128 128 replicated
+        ceph osd pool set openshift size 1
         ceph osd pool application enable openshift rbd
-        
-        # Verify
-        ceph osd pool ls detail | grep openshift
       args:
         chdir: /usr/share/cephadm-ansible/
       register: pool_creation
-    
-    - name: Print pool creation output
+      ignore_errors: true
+
+    - name: Print RGW setup summary
       ansible.builtin.debug:
-        var: pool_creation
+        msg: |
+          RGW Setup Complete
+          Service: rgw.rados
+          HTTPS: https://{{ rgw_host }}:{{ rgw_port }}/
+          Certificate: Let's Encrypt ({{ domain }})
+          OpenShift User: openshift
+          RBD Pool: openshift (1 replica)
