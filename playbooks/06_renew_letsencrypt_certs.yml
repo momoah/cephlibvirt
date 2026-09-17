@@ -1,0 +1,66 @@
+---
+- name: Rotate Ceph SSL certificates
+  hosts: cephadmin
+  become: true
+
+  tasks:
+    - name: Copy certs for dashboard
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        mode: '0600'
+      loop:
+        - { content: "{{ letsencrypt_cert }}", dest: /etc/ceph/dashboard.crt }
+        - { content: "{{ letsencrypt_key_path }}", dest: /etc/ceph/dashboard.key }
+      no_log: true
+
+    - name: Set dashboard SSL certificate
+      ansible.builtin.shell: |
+        ceph dashboard set-ssl-certificate -i /etc/ceph/dashboard.crt
+        ceph dashboard set-ssl-certificate-key -i /etc/ceph/dashboard.key
+        ceph orch restart mgr
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Create RGW spec file with embedded SSL certificate
+      ansible.builtin.copy:
+        content: |
+          service_type: rgw
+          service_id: rados
+          placement:
+            hosts:
+              - cephadmin
+          spec:
+            ssl: true
+            rgw_frontend_port: {{ rgw_port }}
+            rgw_realm: {{ rgw_realm }}
+            rgw_zonegroup: {{ rgw_zonegroup }}
+            rgw_zone: {{ rgw_zone }}
+            rgw_frontend_ssl_certificate: |
+              {{ letsencrypt_key_path | indent(4) }}
+              {{ letsencrypt_cert | indent(4) }}
+        dest: /tmp/rgw-spec.yaml
+        mode: '0644'
+
+    - name: Apply spec and redeploy RGW
+      ansible.builtin.shell: |
+        ceph orch apply -i /tmp/rgw-spec.yaml
+        ceph orch redeploy rgw.rados
+      args:
+        chdir: /usr/share/cephadm-ansible/
+
+    - name: Wait for daemons to restart
+      ansible.builtin.pause:
+        seconds: 30
+
+    - name: Verify certificate expiry on both endpoints
+      ansible.builtin.shell: |
+        for p in {{ rgw_port }} 8443; do
+          echo -n "$p: "
+          echo | openssl s_client -connect {{ rgw_host }}:$p 2>/dev/null | openssl x509 -noout -enddate
+        done
+      register: cert_check
+
+    - name: Print certificate expiry
+      ansible.builtin.debug:
+        var: cert_check.stdout_lines
